@@ -21,6 +21,7 @@ com\dbagent\oracle\UpdateDbInstanceRequest.class
 com\dbagent\query\SqlQueryController.class
 com\dbagent\sqltuning\BindCaptureRequest.class
 com\dbagent\util\Strings.class
+com\dbagent\config\StaticResourceConfig.class
 com\dbagent\monitor\MonitorService.class
 com\dbagent\util\Maps.class
 com\dbagent\aidba\ChatRequest.class

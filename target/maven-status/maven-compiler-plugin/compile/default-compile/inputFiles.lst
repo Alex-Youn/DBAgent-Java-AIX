@@ -5,6 +5,7 @@ C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\query\ExecutionPlanSer
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\UpdateDbInstanceRequest.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\aidba\OllamaChatService.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\auth\TokenRequest.java
+C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\config\StaticResourceConfig.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\util\Lists.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\aidba\AiDbaController.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\query\SqlQueryController.java
