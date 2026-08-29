@@ -82,6 +82,19 @@ function getToken() {
 
 ;(async function initApp() {
     try {
+        // Caps Lock 상태 안내 (로그인 비밀번호 입력창)
+        const loginPasswordInput = document.getElementById('login-password');
+        const loginCapslockHint = document.getElementById('login-password-capslock');
+        if (loginPasswordInput && loginCapslockHint) {
+            const updateCapslockHint = (e) => {
+                const isOn = typeof e.getModifierState === 'function' && e.getModifierState('CapsLock');
+                loginCapslockHint.style.display = isOn ? 'block' : 'none';
+            };
+            loginPasswordInput.addEventListener('keydown', updateCapslockHint);
+            loginPasswordInput.addEventListener('keyup', updateCapslockHint);
+            loginPasswordInput.addEventListener('blur', () => { loginCapslockHint.style.display = 'none'; });
+        }
+
         // Attach auth event listeners
         document.getElementById('login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
