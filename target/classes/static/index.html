@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DB InsightFlow</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=1">
-    <link rel="stylesheet" href="style.css?v=25">
+    <link rel="stylesheet" href="style.css?v=34">
     <script src="lib/lucide.js"></script>
+    <script src="dbagent-common.js?v=10"></script>
     <script src="lib/mermaid.min.js"></script>
     <script src="lib/chart.js"></script>
     <script src="lib/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -104,14 +105,17 @@
                 <div class="login-form-group">
                     <label>현재 비밀번호</label>
                     <input type="password" id="pwd-current" required>
+                    <div id="pwd-current-capslock" style="display:none; color:#fab219; font-size:0.8rem; margin-top:4px;">⚠ Caps Lock이 켜져 있습니다</div>
                 </div>
                 <div class="login-form-group">
                     <label>새 비밀번호</label>
                     <input type="password" id="pwd-new" required>
+                    <div id="pwd-new-capslock" style="display:none; color:#fab219; font-size:0.8rem; margin-top:4px;">⚠ Caps Lock이 켜져 있습니다</div>
                 </div>
                 <div class="login-form-group">
                     <label>새 비밀번호 확인</label>
                     <input type="password" id="pwd-confirm" required>
+                    <div id="pwd-confirm-capslock" style="display:none; color:#fab219; font-size:0.8rem; margin-top:4px;">⚠ Caps Lock이 켜져 있습니다</div>
                 </div>
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
                     <button type="submit" class="login-btn" style="margin-top: 0;">변경</button>
@@ -157,9 +161,19 @@
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-header" style="flex-direction: column; align-items: stretch; gap: 0; padding-bottom: 0;">
-                <div style="display: flex; justify-content: flex-end; align-items: center; padding-bottom: 15px;">
+                <!-- 상단 줄. 높이(54px)와 좌측 타이틀+chevron 드롭다운 구성은 RDB 대시보드의
+                     .pmm-header 와 맞췄다(2026-09-06 사용자 요청) - 두 화면을 오가며 쓰는데
+                     최상단 모양이 서로 달라 이질감이 있었다. 드롭다운은 좌측 트리를 열지 않고도
+                     DB를 바꿀 수 있게 해 준다. -->
+                <div class="top-header-row">
+                    <div class="top-title" id="ora-title-wrap" title="다른 DB 인스턴스로 전환">
+                        <span id="ora-title">Oracle Overview</span>
+                        <i data-lucide="chevron-down" class="caret"></i>
+                        <div id="ora-title-dropdown" class="title-dropdown"></div>
+                    </div>
                     <h1 id="page-title" style="display: none;">대시보드</h1>
                     <div class="header-actions">
+                        <button class="icon-btn rdb-btn" id="rdb-dashboard-btn" style="display: none;" title="RDB 대시보드 (MySQL/MariaDB/PostgreSQL/MS SQL)"><i data-lucide="database"></i>RDB</button>
                         <button class="icon-btn fo-btn" id="fleet-overview-btn" title="Fleet Overview (전체 DB 현황판)">FO</button>
                         <label class="fo-auto-toggle" id="fo-auto-toggle-wrap" title="로그인 시 Fleet Overview로 자동 이동">
                             <input type="checkbox" id="fo-auto-toggle-input"><span>자동</span>
@@ -322,7 +336,8 @@
                             <div id="dash-active-sess" class="dash-tab-content" style="display: block;">
                                 <div class="table-container" style="max-height: 400px; overflow-y: auto;">
                                     <div style="margin-bottom: 10px; text-align: right;">
-                                        <button id="dash-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;">선택 세션 Kill</button>
+                                        <span class="kill-selected-count admin-only" id="dash-selected-count"></span>
+                                        <button id="dash-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;" disabled>선택 세션 Kill</button>
                                     </div>
                                     <table class="data-table">
                                         <thead>
@@ -410,13 +425,30 @@
                             <h2>AI DBA</h2>
                             <p style="color: var(--text-secondary); margin-top: 5px; font-size: 0.9rem;">AI가 데이터베이스 상태를 분석하고 해결책을 제시해 드립니다.</p>
                             <div class="aidba-tabs" style="display: flex; gap: 10px; margin-top: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 0px;">
-                                <button class="aidba-tab-btn active" data-tab="tab-error-search" style="background: none; border: none; color: var(--primary); font-weight: bold; cursor: pointer; padding: 10px 15px; border-bottom: 2px solid var(--primary);">일반오류검색(Regex)</button>
-                                <button class="aidba-tab-btn" data-tab="tab-chat" style="background: none; border: none; color: var(--text-secondary); font-weight: bold; cursor: pointer; padding: 10px 15px; border-bottom: 2px solid transparent;">AI 챗봇 (Ollama)</button>
+                                <button class="aidba-tab-btn active" data-tab="tab-ai-chat" style="background: none; border: none; color: var(--primary); font-weight: bold; cursor: pointer; padding: 10px 15px; border-bottom: 2px solid var(--primary);">AI 챗봇</button>
+                                <button class="aidba-tab-btn" data-tab="tab-error-search" style="background: none; border: none; color: var(--text-secondary); font-weight: bold; cursor: pointer; padding: 10px 15px; border-bottom: 2px solid transparent;">일반오류검색(Regex)</button>
                             </div>
                         </div>
                         <div class="panel-body" style="display: flex; flex-direction: column; height: 780px;">
+                            <!-- AI 챗봇 탭 -->
+                            <div id="tab-ai-chat" class="aidba-tab-content" style="display: flex; flex-direction: column; height: 100%;">
+                                <div id="aidba-chat-history" style="flex: 1; overflow-y: auto; padding: 15px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 15px; background: var(--bg-main); display: flex; flex-direction: column; gap: 10px;">
+                                    <div class="chat-message ai-message" style="display: flex; justify-content: flex-start;">
+                                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; max-width: 80%; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                            안녕하세요! 저는 AI DBA입니다. 현재 DB 상태나 성능 이슈에 대해 무엇이든 물어보세요.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 0;">
+                                    <input type="text" id="aidba-chat-input" placeholder="질문을 입력하세요..." style="flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main);">
+                                    <button id="aidba-chat-send-btn" class="primary-btn" style="padding: 0 20px; border-radius: 6px;">
+                                        <i data-lucide="send"></i> 전송
+                                    </button>
+                                </div>
+                            </div>
+                            
                             <!-- 일반오류검색(Regex) 탭 -->
-                            <div id="tab-error-search" class="aidba-tab-content" style="display: flex; flex-direction: column; height: 100%;">
+                            <div id="tab-error-search" class="aidba-tab-content" style="display: none; flex-direction: column; height: 100%;">
                                 <div class="search-bar" style="display: flex; gap: 10px; margin-bottom: 15px;">
                                     <input type="text" id="error-code-input" placeholder="오라클 에러 코드 입력 (예: ORA-01555)" style="flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main);">
                                     <button id="error-search-btn" class="primary-btn" style="padding: 0 20px; border-radius: 6px;">
@@ -429,29 +461,16 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- AI 챗봇(Ollama) 탭 -->
-                            <div id="tab-chat" class="aidba-tab-content" style="display: none; flex-direction: column; height: 100%;">
-                                <div id="chat-log" style="flex: 1; overflow-y: auto; padding: 20px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); margin-bottom: 15px;">
-                                    <div style="color: var(--text-secondary); text-align: center; margin-top: 50px;">
-                                        ORA 에러코드나 DB 관련 질문을 입력해 보세요. (예: ORA-01555 관련해서 어떻게 조치해야 해?)
-                                    </div>
-                                </div>
-                                <div class="search-bar" style="display: flex; gap: 10px;">
-                                    <input type="text" id="chat-input" placeholder="질문을 입력하세요" style="flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
-                                    <button id="chat-send-btn" class="primary-btn" style="padding: 0 20px; border-radius: 6px;">
-                                        <i data-lucide="send"></i> 전송
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </section>
 
+                <!-- SQL 정합성/튜닝 Section -->
                 <section id="sqltuning" class="content-section">
                     <div class="panel">
                         <div class="panel-header">
                             <h2>SQL 정합성/튜닝</h2>
-                            <p style="color: var(--text-secondary); margin-top: 5px; font-size: 0.9rem;">실행계획/실측 통계를 직접 조회하는 메뉴입니다. (이 환경에는 AI 모델 서버가 연동되어 있지 않아 모델 기반 분석 버튼은 비활성 안내만 표시됩니다 - "1차 성능점검"으로 실행계획/실측 통계를 직접 확인하세요)</p>
+                            <p style="color: var(--text-secondary); margin-top: 5px; font-size: 0.9rem;">Oracle SQL 정합성/성능 튜닝 전용으로 파인튜닝한 로컬 sLLM입니다. 쿼리/실행계획이나 증상을 설명하면 원인과 조치 방안을 제시합니다. (첫 응답까지 최대 1분 정도 걸릴 수 있습니다)</p>
                         </div>
                         <div class="panel-body">
                             <div class="admin-only" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card);">
@@ -459,15 +478,15 @@
                                 <label for="sqltuning-account-select" style="font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap;">접속 계정</label>
                                 <select id="sqltuning-account-select" class="form-input" style="padding: 6px 8px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-main); color: var(--text-main);"></select>
                                 <button id="sqltuning-auto-btn" class="primary-btn" style="padding: 6px 14px; border-radius: 4px; font-size: 0.85rem; white-space: nowrap;"><i data-lucide="database"></i> 실행계획 조회 후 분석</button>
-                                <span style="font-size: 0.8rem; color: var(--text-muted);">(EXPLAIN PLAN - 쿼리 미실행, 추정치, AI 모델 필요)</span>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">(EXPLAIN PLAN - 쿼리 미실행, 추정치)</span>
                                 <button id="sqltuning-auto-actual-btn" class="danger-btn" style="padding: 6px 14px; border-radius: 4px; font-size: 0.85rem; white-space: nowrap;"><i data-lucide="play"></i> 실제 실행 통계로 분석</button>
-                                <span style="font-size: 0.8rem; color: var(--text-muted);">(DISPLAY_CURSOR - <strong>쿼리를 실제로 실행함</strong>, 실측치, SELECT/WITH만 가능, AI 모델 필요)</span>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">(DISPLAY_CURSOR - <strong>쿼리를 실제로 실행함</strong>, 실측치, SELECT/WITH만 가능)</span>
                                 <button id="sqltuning-quickcheck-btn" class="danger-btn" style="padding: 6px 14px; border-radius: 4px; font-size: 0.85rem; white-space: nowrap;"><i data-lucide="list-checks"></i> 1차 성능점검</button>
-                                <span style="font-size: 0.8rem; color: var(--text-muted);">(위와 동일하게 <strong>쿼리를 실제로 실행</strong>하지만, AI 분석 없이 실행계획/실측 통계만 바로 보여줌 - 더 빠름, 모델 불필요)</span>
+                                <span style="font-size: 0.8rem; color: var(--text-muted);">(위와 동일하게 <strong>쿼리를 실제로 실행</strong>하지만, AI 분석 없이 실행계획/실측 통계만 바로 보여줌 - 더 빠름)</span>
                             </div>
                             <div id="sqltuning-bind-panel" class="admin-only" style="display: none; flex-direction: column; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card);">
                                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
-                                    <span style="font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap;">바인드 변수 값 (:1, :SID 등 - "실제 실행 통계로 분석"/"1차 성능점검"에 사용):</span>
+                                    <span style="font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap;">바인드 변수 값 (:1, :SID 등 - "실제 실행 통계로 분석"에만 사용):</span>
                                     <button type="button" id="sqltuning-bind-toggle-btn" style="display: none; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; border: 1px solid var(--border-color); background: var(--bg-main); color: var(--text-secondary); cursor: pointer;"></button>
                                 </div>
                                 <div id="sqltuning-bind-fields" style="display: flex; flex-wrap: wrap; gap: 8px;"></div>
@@ -479,10 +498,10 @@
                                 </div>
                             </div>
                             <div class="input-group">
-                                <textarea id="sqltuning-input" rows="8" placeholder="분석하려는 SQL 쿼리를 입력하세요. (Ctrl+Enter: 분석 실행)" style="width: 100%; font-family: 'Consolas', 'D2Coding', monospace; font-size: 0.9rem; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main); resize: vertical;"></textarea>
+                                <textarea id="sqltuning-input" rows="8" placeholder="예: ORDERS와 ORDER_ITEMS를 조인하는 쿼리가 NESTED LOOPS로 실행되어 Cost가 매우 높게 나옵니다. 실행계획: ... (Ctrl+Enter: 분석 실행)" style="width: 100%; font-family: 'Consolas', 'D2Coding', monospace; font-size: 0.9rem; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main); resize: vertical;"></textarea>
                                 <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px;">
                                     <button id="sqltuning-clear-btn" type="button" style="padding: 0 20px; border-radius: 6px; height: 40px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary); cursor: pointer;"><i data-lucide="eraser"></i> 화면 클리어</button>
-                                    <button id="sqltuning-run-btn" class="primary-btn"><i data-lucide="search"></i> 분석 실행 (Ctrl+Enter, AI 모델 필요)</button>
+                                    <button id="sqltuning-run-btn" class="primary-btn"><i data-lucide="search"></i> 분석 실행 (Ctrl+Enter)</button>
                                 </div>
                             </div>
                             <div id="sqltuning-result" style="margin-top: 20px; padding: 20px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); min-height: 150px;">
@@ -624,7 +643,8 @@
                         <div class="panel-header">
                             <h2>Lock Holder/Waiter Tree 실시간 모니터링</h2>
                             <div style="display: flex; gap: 20px;">
-                                <button id="tmlock-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;">선택 세션 Kill</button>
+                                <span class="kill-selected-count admin-only" id="tmlock-selected-count"></span>
+                                <button id="tmlock-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;" disabled>선택 세션 Kill</button>
                                 <div class="refresh-controls" style="display: flex; align-items: center; gap: 10px;">
                                     <label for="tmlock-refresh-interval" style="font-size: 0.9rem; color: var(--text-secondary);">리프레쉬 주기(초):</label>
                                     <input type="number" id="tmlock-refresh-interval" value="5" min="1" max="60" style="width: 60px; padding: 4px 8px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-card); color: var(--text-primary);">
@@ -634,13 +654,24 @@
                             </div>
                         </div>
                         <div class="panel-body">
+                            <!-- 2026-09-06: 이 표가 RDB 대시보드와 같은 배지+트리 방식으로 바뀌면서 BOTH 가
+                                 등장하는데, 무슨 뜻인지와 어떻게 처리해야 하는지가 화면 어디에도 없었다.
+                                 RDB Lock 탭과 같은 내용을 둔다(rdb-session-views.js 의 기본 문구). -->
+                            <p class="lock-help">
+                                락을 쥔 세션(Holder)을 위에, 그 락을 기다리는 세션(Waiter)을 아래에 붙여 트리로 보여줍니다.
+                                A가 B를, B가 C를 막는 다단계 체인도 그대로 이어지며, 가운데 세션은 <b>BOTH</b>로 표시됩니다.
+                                맨 위 Holder만 종료하면 바로 아래 한 단계만 풀리고 그 아래는 계속 기다립니다 —
+                                체인을 한 번에 정리하려면 <b>Holder와 BOTH를 함께 선택해 종료</b>하세요.
+                            </p>
                             <div class="table-container" style="max-height: 500px; overflow-y: auto; margin-top: 10px;">
                                 <table class="data-table" style="width: 100%; text-align: left;">
                                     <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
                                         <tr>
+                                            <!-- INST_ID 는 2026-09-06 에 뺐다: RAC 환경이라도 gv$ 를 쓰지 않기로
+                                                 확정해(실 RAC 에서 Lock/세션 조회 성능 저하) 단일 인스턴스 값만
+                                                 나오는 칸이었다. 대신 맨 끝에 OS User 를 넣는다. -->
                                             <th style="width: 40px; text-align: center;"><input type="checkbox" id="tmlock-select-all"></th>
                                             <th>SID</th>
-                                            <th>INST_ID</th>
                                             <th>Serial#</th>
                                             <th>SPID</th>
                                             <th>userName</th>
@@ -652,6 +683,7 @@
                                             <th>Status</th>
                                             <th>Program</th>
                                             <th>machine</th>
+                                            <th>OS User</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tmlock-tbody">
@@ -705,7 +737,8 @@
                             <!-- Tab: Active Session -->
                             <div id="sesslist-active-session" class="sesslist-tab-content" style="display: block;">
                                 <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 10px;">
-                                    <button id="session-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;">선택 세션 Kill</button>
+                                    <span class="kill-selected-count admin-only" id="session-selected-count"></span>
+                                    <button id="session-kill-btn" class="danger-btn admin-only" style="padding: 6px 12px; border-radius: 4px; font-size: 0.9rem;" disabled>선택 세션 Kill</button>
                                 </div>
                                 <div style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
                                     <table class="data-table" style="border: none;">
@@ -932,7 +965,8 @@
         <div id="modal-content" style="margin: auto; display: block; width: 90%; max-width: 1200px; padding: 20px; background: var(--bg-card); border-radius: 8px; margin-top: 50px;">
         </div>
     </div>
-    
-    <script src="app.js?v=81"></script>
+
+
+    <script src="app.js?v=96"></script>
 </body>
 </html>
