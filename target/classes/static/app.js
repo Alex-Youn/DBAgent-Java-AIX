@@ -4023,6 +4023,11 @@ let historySortAsc = true;
     // 성능분석은 1차점검으로 실측치를 이미 얻었을 때만 의미가 있다(쿼리 텍스트만 있는 분석은 탭 ①의
     // 몫이라 중복) - 직전 1차점검 결과를 여기 들고 있다가 성능분석 호출 시 그대로 함께 보낸다.
     let tunnerCurrentLastPlan = null;
+    // 후속질문(2026-09-15) 컨텍스트 - sqlrestapi는 세션을 기억하지 않으므로(stateless), 이전
+    // 분석/문답 내역을 프론트에서 누적해뒀다가 다음 질문을 보낼 때 매번 그대로 다시 실어 보낸다.
+    // { question: string|null, answer: string }[] - 최초 분석은 question이 null.
+    let tunnerCurrentAnswerHistory = [];
+    const escapeTunnerCurrentHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     function extractTunnerCurrentBindNames(query) {
         const stripped = query.replace(/'(?:[^']|'')*'|\/\*[\s\S]*?\*\/|--[^\r\n]*/g, (m) => m.charAt(0) === "'" ? "''" : ' ');
@@ -4123,6 +4128,7 @@ let historySortAsc = true;
             window.renderTunnerCurrentBindFields();
             // 쿼리를 고치면 방금 전 1차점검 결과와 더 이상 대응하지 않으므로 성능분석을 다시 잠근다.
             tunnerCurrentLastPlan = null;
+            tunnerCurrentAnswerHistory = [];
             if (tunnerCurrentAnalyzeBtn) tunnerCurrentAnalyzeBtn.disabled = true;
         });
         // placeholder 가 "(Ctrl+Enter: 1차 성능점검)" 이라고 안내하므로 실제로 동작하게 한다.
@@ -4171,6 +4177,7 @@ let historySortAsc = true;
             tunnerCurrentQuickCheckBtn.disabled = true;
             if (tunnerCurrentAnalyzeBtn) tunnerCurrentAnalyzeBtn.disabled = true;
             tunnerCurrentLastPlan = null;
+            tunnerCurrentAnswerHistory = [];
             tunnerCurrentResult.innerHTML = '<div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);"><i data-lucide="loader-2" class="spinning"></i> 쿼리를 실제로 실행 중...</div>';
             if (typeof lucide !== 'undefined') lucide.createIcons({root: tunnerCurrentResult});
 
@@ -4214,6 +4221,7 @@ let historySortAsc = true;
             if (!analysisEl) return;
 
             tunnerCurrentAnalyzeBtn.disabled = true;
+            tunnerCurrentAnswerHistory = []; // 새로 분석을 돌리면 이전 후속질문 맥락은 폐기
             analysisEl.innerHTML = '<div style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary); margin-top: 16px;"><i data-lucide="loader-2" class="spinning"></i> AI가 실측치를 분석 중입니다...</div>';
             if (typeof lucide !== 'undefined') lucide.createIcons({root: analysisEl});
 
@@ -4236,7 +4244,8 @@ let historySortAsc = true;
                 const analysisWrapper = document.createElement('div');
                 analysisWrapper.style.cssText = 'line-height: 1.6; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);';
                 analysisEl.appendChild(analysisWrapper);
-                typeHtmlInto(analysisWrapper, formatted);
+                tunnerCurrentAnswerHistory = [{ question: null, answer: data.answer }];
+                typeHtmlInto(analysisWrapper, formatted, { onComplete: () => renderTunnerCurrentFollowup(analysisEl) });
             })
             .catch(() => {
                 tunnerCurrentAnalyzeBtn.disabled = false;
@@ -4252,12 +4261,104 @@ let historySortAsc = true;
             tunnerCurrentBindValues = {};
             tunnerCurrentBindExpanded = false;
             tunnerCurrentLastPlan = null;
+            tunnerCurrentAnswerHistory = [];
             if (tunnerCurrentAnalyzeBtn) tunnerCurrentAnalyzeBtn.disabled = true;
             if (tunnerCurrentBindHashInput) tunnerCurrentBindHashInput.value = '';
             if (tunnerCurrentBindCaptureStatus) tunnerCurrentBindCaptureStatus.textContent = '';
             window.renderTunnerCurrentBindFields();
             tunnerCurrentResult.innerHTML = '<div style="color: var(--text-secondary); text-align: center; margin-top: 30px;">쿼리를 입력하고 "1차 성능점검"을 실행하면 실행계획/실측 통계가 여기에 표시됩니다.</div>';
             tunnerCurrentInput.focus();
+        });
+    }
+
+    // 후속질문(2026-09-15): 최초 성능분석이 끝나면 결과 아래에 "추가 질문" 입력을 붙여, 같은 쿼리/
+    // 실행계획 맥락에서 AI에게 더 물어볼 수 있게 한다. sqlrestapi는 세션이 없으므로(stateless), 매
+    // 질문마다 지금까지의 분석/문답 내역(tunnerCurrentAnswerHistory)을 그대로 다시 실어 보낸다 - 대화가
+    // 길어질수록 프롬프트가 커져 느려지고 결국 길이 제한에 걸릴 수 있지만, 짧은 후속질문 몇 번엔 충분하고
+    // sqlrestapi(별도 GPU 서버 프로젝트) 쪽 변경 없이 지금 붙일 수 있는 가장 작은 구현이라 우선 이걸로 함.
+    function buildTunnerCurrentPreviousContext() {
+        return tunnerCurrentAnswerHistory.map(turn => {
+            if (turn.question === null) return turn.answer; // 최초 분석 답변
+            return `[DBA 추가 질문] ${turn.question}\n[AI 답변] ${turn.answer}`;
+        }).join('\n\n');
+    }
+
+    function renderTunnerCurrentFollowup(analysisEl) {
+        let followupEl = document.getElementById('tunner-current-followup');
+        if (!followupEl) {
+            followupEl = document.createElement('div');
+            followupEl.id = 'tunner-current-followup';
+            followupEl.style.cssText = 'margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border-color);';
+            analysisEl.appendChild(followupEl);
+        }
+        followupEl.innerHTML = `
+            <div style="display: flex; gap: 8px; align-items: flex-start;">
+                <textarea id="tunner-current-followup-input" rows="2" placeholder="추가로 궁금한 점을 입력하세요 (예: 인덱스 설계안도 제안해줘)" style="flex: 1; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-card); color: var(--text-main); font-family: inherit; font-size: 0.88rem; resize: vertical;"></textarea>
+                <button id="tunner-current-followup-btn" class="primary-btn" style="padding: 0 16px; height: 38px; white-space: nowrap;"><i data-lucide="send"></i> 추가 질문</button>
+            </div>
+            <div id="tunner-current-followup-status" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;"></div>`;
+        if (typeof lucide !== 'undefined') lucide.createIcons({root: followupEl});
+
+        const followupInput = document.getElementById('tunner-current-followup-input');
+        const followupBtn = document.getElementById('tunner-current-followup-btn');
+        const followupStatus = document.getElementById('tunner-current-followup-status');
+
+        const submitFollowup = () => {
+            const question = followupInput.value.trim();
+            if (!question || followupBtn.disabled) return;
+            followupBtn.disabled = true;
+            followupInput.disabled = true;
+            followupStatus.textContent = '';
+
+            const turnBlock = document.createElement('div');
+            turnBlock.style.cssText = 'margin-bottom: 16px;';
+            turnBlock.innerHTML = `<div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 6px;">${escapeTunnerCurrentHtml(question)}</div><div class="tunner-current-followup-answer" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);"><i data-lucide="loader-2" class="spinning"></i> AI가 답변을 작성 중입니다...</div>`;
+            followupEl.parentNode.insertBefore(turnBlock, followupEl);
+            if (typeof lucide !== 'undefined') lucide.createIcons({root: turnBlock});
+            turnBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            fetch('/api/aidba/current_sql/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: tunnerCurrentInput.value.trim(),
+                    binds: tunnerCurrentBindValues,
+                    plan: tunnerCurrentLastPlan,
+                    previousContext: buildTunnerCurrentPreviousContext(),
+                    followUpQuestion: question
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                followupBtn.disabled = false;
+                followupInput.disabled = false;
+                const answerEl = turnBlock.querySelector('.tunner-current-followup-answer');
+                if (data.success === false) {
+                    answerEl.style.cssText = 'color: #d03b3b;';
+                    answerEl.textContent = data.message || '답변 생성 중 오류가 발생했습니다.';
+                    return;
+                }
+                tunnerCurrentAnswerHistory.push({ question: question, answer: data.answer });
+                answerEl.style.cssText = 'line-height: 1.6;';
+                answerEl.innerHTML = '';
+                followupInput.value = '';
+                typeHtmlInto(answerEl, formatAiMarkdownAnswer(data.answer));
+            })
+            .catch(() => {
+                followupBtn.disabled = false;
+                followupInput.disabled = false;
+                const answerEl = turnBlock.querySelector('.tunner-current-followup-answer');
+                answerEl.style.cssText = 'color: #d03b3b;';
+                answerEl.textContent = '서버 통신 오류가 발생했습니다.';
+            });
+        };
+
+        followupBtn.addEventListener('click', submitFollowup);
+        followupInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitFollowup();
+            }
         });
     }
 
@@ -4281,15 +4382,72 @@ let historySortAsc = true;
     // HTML로 바꾼다 - 정식 마크다운 파서가 아니라 이 화면에서 실제로 나오는 패턴에 맞춘 간이 변환.
     function formatAdvisorAnswer(text) {
         if (!text) return '';
-        let html = escapeHtml(text);
-        html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) =>
-            `<pre style="background: rgba(0,0,0,0.3); color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre; font-family: 'D2Coding', Consolas, monospace; font-size: 0.85rem; margin: 10px 0; line-height: 1.4;">${code}</pre>`);
-        html = html.replace(/^#{2,4}\s+(.+)$/gm,
-            '<div style="margin: 16px 0 8px; font-weight: 700; color: var(--primary); font-size: 1rem;">$1</div>');
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/`([^`]+)`/g, '<code style="background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace;">$1</code>');
-        html = html.replace(/^-\s+(.+)$/gm, '<div style="margin: 3px 0 3px 14px;">• $1</div>');
-        html = html.replace(/\n/g, '<br/>');
+        // 문단(특히 번호 섹션 1,2,3...) 간격이 너무 넓다는 사용자 지적(2026-09-14). 원인: 헤더/구분선(---)/
+        // 글머리를 자체 margin이 있는 <div>로 바꿔도, 그 앞뒤에 낀 마크다운 상의 빈 줄은 그대로 남아
+        // 있다가 마지막 \n->br 치환에서 <br/>가 되어 div margin 위에 또 쌓인다. 특히 "---"로 구분되는
+        // 절 사이엔 "빈 줄 + --- + 빈 줄"이 한꺼번에 끼어 있어 헤더 하나 지날 때마다 <br/>가 여러 번
+        // 겹쳤다. 정규식 치환을 이어 붙이는 대신 줄 단위로 순회하면서, 헤더/구분선/글머리는 서로 인접한
+        // <div>로만 쌓는다(인접 블록 요소의 위아래 margin은 브라우저가 알아서 겹쳐 처리한다) - 그 사이에
+        // 낀 빈 줄은 버리고, 일반 문단과 문단 사이의 빈 줄만 <br/><br/> 한 번으로 살려 문단 구분을 유지한다.
+        // (DBAgent-Java와 동일)
+        const bold = (s) => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const inlineCode = (s) => s.replace(/`([^`]+)`/g, '<code style="background: rgba(0,0,0,0.25); padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace;">$1</code>');
+        const inline = (s) => inlineCode(bold(s));
+
+        const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+        let html = '';
+        let inCode = false;
+        let codeBuf = [];
+        let lastBlock = true;
+        let pendingGap = false;
+
+        const flushCode = () => {
+            html += `<pre style="background: rgba(0,0,0,0.3); color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre; font-family: 'D2Coding', Consolas, monospace; font-size: 0.85rem; margin: 10px 0; line-height: 1.4;">${codeBuf.join('\n')}</pre>`;
+            codeBuf = [];
+            lastBlock = true;
+            pendingGap = false;
+        };
+
+        for (const raw of lines) {
+            if (inCode) {
+                if (raw.trim() === '```') { inCode = false; flushCode(); }
+                else codeBuf.push(escapeHtml(raw));
+                continue;
+            }
+            if (/^```/.test(raw.trim())) { inCode = true; continue; }
+
+            if (raw.trim() === '') {
+                pendingGap = true;
+                continue;
+            }
+
+            const heading = /^#{2,4}\s+(.+)$/.exec(raw);
+            if (heading) {
+                html += `<div style="margin: 16px 0 8px; font-weight: 700; color: var(--primary); font-size: 1rem;">${inline(escapeHtml(heading[1]))}</div>`;
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            if (/^-{3,}\s*$/.test(raw.trim())) {
+                html += '<div style="border-top: 1px solid var(--border-color); margin: 14px 0;"></div>';
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            const bullet = /^(\s*)-\s+(.+)$/.exec(raw);
+            if (bullet) {
+                const nested = bullet[1].length >= 2;
+                html += `<div style="margin: 3px 0 3px ${nested ? 28 : 14}px;">• ${inline(escapeHtml(bullet[2]))}</div>`;
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            if (pendingGap && !lastBlock) html += '<br/><br/>';
+            else if (!lastBlock) html += '<br/>';
+            html += inline(escapeHtml(raw));
+            lastBlock = false; pendingGap = false;
+        }
+        if (inCode) flushCode();
         return html;
     }
 
@@ -4693,6 +4851,8 @@ let historySortAsc = true;
             }
             if (idx < queue.length) {
                 setTimeout(step, intervalMs);
+            } else if (typeof opts.onComplete === 'function') {
+                opts.onComplete();
             }
         }
         step();
@@ -4704,14 +4864,65 @@ let historySortAsc = true;
     function formatAiMarkdownAnswer(text) {
         if (!text) return '';
         const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        let html = escapeHtml(text);
-        html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) =>
-            `<pre style="background: rgba(0,0,0,0.3); color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre; font-family: 'D2Coding', Consolas, monospace; font-size: 0.85rem; margin: 10px 0; line-height: 1.4;">${code}</pre>`);
-        html = html.replace(/^#{2,4}\s+(.+)$/gm,
-            '<div style="margin: 16px 0 8px; font-weight: 700; color: var(--primary); font-size: 1rem;">$1</div>');
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/^-\s+(.+)$/gm, '<div style="margin: 3px 0 3px 14px;">• $1</div>');
-        html = html.replace(/\n/g, '<br/>');
+        // 문단(특히 번호 섹션 1,2,3...) 간격이 너무 넓다는 사용자 지적(2026-09-14) - formatAdvisorAnswer와
+        // 같은 원인(헤더/구분선/글머리 앞뒤 빈 줄이 div margin 위에 <br/>로 겹쳐 쌓임)이라 같은 줄 단위
+        // 렌더링 방식으로 수정 - 자세한 이유는 그쪽 주석 참고. (DBAgent-Java와 동일)
+        const bold = (s) => s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+        const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+        let html = '';
+        let inCode = false;
+        let codeBuf = [];
+        let lastBlock = true;
+        let pendingGap = false;
+
+        const flushCode = () => {
+            html += `<pre style="background: rgba(0,0,0,0.3); color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; white-space: pre; font-family: 'D2Coding', Consolas, monospace; font-size: 0.85rem; margin: 10px 0; line-height: 1.4;">${codeBuf.join('\n')}</pre>`;
+            codeBuf = [];
+            lastBlock = true;
+            pendingGap = false;
+        };
+
+        for (const raw of lines) {
+            if (inCode) {
+                if (raw.trim() === '```') { inCode = false; flushCode(); }
+                else codeBuf.push(escapeHtml(raw));
+                continue;
+            }
+            if (/^```/.test(raw.trim())) { inCode = true; continue; }
+
+            if (raw.trim() === '') {
+                pendingGap = true;
+                continue;
+            }
+
+            const heading = /^#{2,4}\s+(.+)$/.exec(raw);
+            if (heading) {
+                html += `<div style="margin: 16px 0 8px; font-weight: 700; color: var(--primary); font-size: 1rem;">${bold(escapeHtml(heading[1]))}</div>`;
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            if (/^-{3,}\s*$/.test(raw.trim())) {
+                html += '<div style="border-top: 1px solid var(--border-color); margin: 14px 0;"></div>';
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            const bullet = /^(\s*)-\s+(.+)$/.exec(raw);
+            if (bullet) {
+                const nested = bullet[1].length >= 2;
+                html += `<div style="margin: 3px 0 3px ${nested ? 28 : 14}px;">• ${bold(escapeHtml(bullet[2]))}</div>`;
+                lastBlock = true; pendingGap = false;
+                continue;
+            }
+
+            if (pendingGap && !lastBlock) html += '<br/><br/>';
+            else if (!lastBlock) html += '<br/>';
+            html += bold(escapeHtml(raw));
+            lastBlock = false; pendingGap = false;
+        }
+        if (inCode) flushCode();
         return html;
     }
 
