@@ -1,4 +1,5 @@
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\sqltuning\BindCaptureRequest.java
+C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\monitor\InstanceMetricSamplerService.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\query\ExecutionPlanService.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\UpdateDbInstanceRequest.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\aidba\OllamaChatService.java
@@ -46,6 +47,7 @@ C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\sqltuneadvisor\SqlTune
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\TnsAdminInitializer.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\rdb\RdbMonitorController.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\DatabaseConfigService.java
+C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\monitor\InstanceMetricHistoryService.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\DbConfigAdminController.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\oracle\TargetDbConfig.java
 C:\AI-Projects\DBAgent-Java-AIX\src\main\java\com\dbagent\auth\UpdateUserRequest.java
